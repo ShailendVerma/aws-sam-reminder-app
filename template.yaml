@@ -1,0 +1,139 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  sam-app
+
+  Sample SAM Template for sam-app
+
+# More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
+Globals:
+  Function:
+    Timeout: 3
+
+Resources:
+  CreateReminderFunction:
+    Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
+    Properties:
+      CodeUri: reminder/
+      Handler: handle_reminder_api.create_reminder
+      Runtime: python3.6
+      Events:
+        Reminder:
+          Type: Api # More info about API Event Source: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#api
+          Properties:
+            Path: /create
+            Method: post
+  UpdateReminderFunction:
+    Type: AWS::Serverless::Function 
+    Properties:
+      CodeUri: reminder/
+      Handler: handle_reminder_api.update_reminder
+      Runtime: python3.6
+      Events:
+        Reminder:
+          Type: Api 
+          Properties:
+            Path: /update
+            Method: post
+  DeleteReminderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: reminder/
+      Handler: handle_reminder_api.delete_reminder
+      Runtime: python3.6
+      Events:
+        Reminder:
+          Type: Api
+          Properties:
+            Path: /delete
+            Method: get
+  AcknowledgeReminderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: reminder/
+      Handler: handle_reminder_api.ack_reminder
+      Runtime: python3.6
+      Events:
+        Reminder:
+          Type: Api
+          Properties:
+            Path: /ack
+            Method: get
+  ExecuteReminderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: reminder/
+      Handler: execute_reminder_handler.execute_reminder
+      Runtime: python3.6
+      Events:
+        HelloWorld:
+          Type: Api
+          Properties:
+            Path: /ack
+            Method: get
+  DynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties: 
+      AttributeDefinitions: 
+        - AttributeName: reminder_id
+          AttributeType: S
+      KeySchema: 
+        - AttributeName: reminder_id
+          KeyType: HASH
+      ProvisionedThroughput: 
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+  ReminderStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      StateMachineName: Reminder-StateMachine
+      DefinitionString: |-
+        {
+          "StartAt": "wait_to_execute",
+          "States": {
+          "wait_to_execute": {
+            "Type": "Wait",
+            "TimestampPath": "$.notifyDate",
+            "Next": "executeNotifyLambda"
+            },
+            "executeNotifyLambda": {
+              "Type": "Task",
+              "Resource": "arn:aws:states:us-east-1:123456789012:activity:HelloWorld",
+              "Parameters":{  
+                  "FunctionName":"get-model-review-decision"
+              },
+              "Next": "checkSuccess"
+            },
+            "checkSuccess": {
+              "Type": "Choice",
+              "Choices" : [
+                {
+                "Variable": "$.reschedule",
+                "StringEquals": "true",
+                "Next": "wait_to_execute"
+                }
+              ],
+            "Default": "SuccessState"
+            },
+            "SuccessState": {
+              "Type": "Succeed"
+            }
+          }
+        }
+      RoleArn: arn:aws:iam::111122223333:role/service-role/StatesExecutionRole-us-east-1
+
+Outputs:
+  # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
+  # Find out more about other implicit resources you can reference within SAM
+  # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
+  HelloWorldApi:
+    Description: "API Gateway endpoint URL for Prod stage for Hello World function"
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/"
+  HelloWorldFunction:
+    Description: "Hello World Lambda Function ARN"
+    Value: !GetAtt HelloWorldFunction.Arn
+  HelloWorldFunctionIamRole:
+    Description: "Implicit IAM Role created for Hello World function"
+    Value: !GetAtt HelloWorldFunctionRole.Arn
