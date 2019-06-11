@@ -1,9 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  sam-app
-
-  Sample SAM Template for sam-app
+  Reminders Serverless App
 
 # More info about Globals: https://github.com/awslabs/serverless-application-model/blob/master/docs/globals.rst
 Globals:
@@ -11,11 +9,77 @@ Globals:
     Timeout: 3
 
 Resources:
+#DynamoDB Table
+  RemindersTable:
+    Type: AWS::DynamoDB::Table
+    Properties: 
+      AttributeDefinitions: 
+        - AttributeName: reminder_id
+          AttributeType: S
+        - AttributeName: user_id
+          AttributeType: S
+      KeySchema: 
+        - AttributeName: reminder_id
+          KeyType: HASH
+        - AttributeName: user_id
+          KeyType: RANGE
+      ProvisionedThroughput: 
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
+      TableName: !Join 
+        - ''
+        - - !Ref 'AWS::StackName'
+          - '-RemindersTable'
+
+  #Create Reminder Role - allows logging to cloud watch logs and putItem in DynamoDB table defined above
+  CreateReminderFunctionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: CreateReminderFunctionPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+                #log to cloud formation
+              - Effect: Allow
+                Action:
+                  - 'logs:*'
+                Resource: 'arn:aws:logs:*:*:*'
+                #Insert into Dynamo DB
+              - Effect: Allow
+                Action:
+                  - 'dynamodb:PutItem'
+                Resource: !Join 
+                  - ''
+                  - - 'arn:aws:dynamodb:'
+                    - !Ref 'AWS::Region'
+                    - ':'
+                    - !Ref 'AWS::AccountId'
+                    - ':table/'
+                    - !Ref 'AWS::StackName'
+                    - '-RemindersTable'
+
+  #Lambda to insert reminders into dynamo db
   CreateReminderFunction:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
     Properties:
       CodeUri: reminder/
-      Handler: handle_reminder_api.create_reminder
+      Handler: api_reminder_handler.create_reminder
+      Role: !GetAtt 
+        - CreateReminderFunctionRole
+        - Arn
       Runtime: python3.6
       Events:
         Reminder:
@@ -23,11 +87,54 @@ Resources:
           Properties:
             Path: /create
             Method: post
+
+  #Update Reminder Role - allows logging to cloud watch logs and putItem in DynamoDB table defined above
+  UpdateReminderFunctionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: UpdateReminderFunctionPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+                #log to cloud formation
+              - Effect: Allow
+                Action:
+                  - 'logs:*'
+                Resource: 'arn:aws:logs:*:*:*'
+                #Insert into Dynamo DB
+              - Effect: Allow
+                Action:
+                  - 'dynamodb:UpdateItem'
+                Resource: !Join 
+                  - ''
+                  - - 'arn:aws:dynamodb:'
+                    - !Ref 'AWS::Region'
+                    - ':'
+                    - !Ref 'AWS::AccountId'
+                    - ':table/'
+                    - !Ref 'AWS::StackName'
+                    - '-RemindersTable'
+
+  #Lambda to update reminders existing in dynamo db
   UpdateReminderFunction:
     Type: AWS::Serverless::Function 
     Properties:
       CodeUri: reminder/
-      Handler: handle_reminder_api.update_reminder
+      Handler: api_reminder_handler.update_reminder
+      Role: !GetAtt 
+        - UpdateReminderFunctionRole
+        - Arn
       Runtime: python3.6
       Events:
         Reminder:
@@ -35,11 +142,54 @@ Resources:
           Properties:
             Path: /update
             Method: post
+
+  #Delete Reminder Role - allows logging to cloud watch logs and DeleteItem in DynamoDB table defined above
+  DeleteReminderFunctionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: DeleteReminderFunctionPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+                #log to cloud formation
+              - Effect: Allow
+                Action:
+                  - 'logs:*'
+                Resource: 'arn:aws:logs:*:*:*'
+                #Insert into Dynamo DB
+              - Effect: Allow
+                Action:
+                  - 'dynamodb:DeleteItem'
+                Resource: !Join 
+                  - ''
+                  - - 'arn:aws:dynamodb:'
+                    - !Ref 'AWS::Region'
+                    - ':'
+                    - !Ref 'AWS::AccountId'
+                    - ':table/'
+                    - !Ref 'AWS::StackName'
+                    - '-RemindersTable'
+
+  #Lambda to Delete reminders existing in dynamo db
   DeleteReminderFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: reminder/
-      Handler: handle_reminder_api.delete_reminder
+      Handler: api_reminder_handler.delete_reminder
+      Role: !GetAtt 
+        - DeleteReminderFunctionRole
+        - Arn
       Runtime: python3.6
       Events:
         Reminder:
@@ -47,11 +197,54 @@ Resources:
           Properties:
             Path: /delete
             Method: get
+
+  #Acknowledge Reminder Role - allows logging to cloud watch logs and putItem in DynamoDB table defined above
+  AcknowledgeReminderFunctionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: AcknowledgeReminderFunctionPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+                #log to cloud formation
+              - Effect: Allow
+                Action:
+                  - 'logs:*'
+                Resource: 'arn:aws:logs:*:*:*'
+                #Insert into Dynamo DB
+              - Effect: Allow
+                Action:
+                  - 'dynamodb:UpdateItem'
+                Resource: !Join 
+                  - ''
+                  - - 'arn:aws:dynamodb:'
+                    - !Ref 'AWS::Region'
+                    - ':'
+                    - !Ref 'AWS::AccountId'
+                    - ':table/'
+                    - !Ref 'AWS::StackName'
+                    - '-RemindersTable'
+
+  #Lambda to Mark reminder as acknowledged in dynamo db
   AcknowledgeReminderFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: reminder/
-      Handler: handle_reminder_api.ack_reminder
+      Handler: api_reminder_handler.ack_reminder
+      Role: !GetAtt 
+        - AcknowledgeReminderFunctionRole
+        - Arn
       Runtime: python3.6
       Events:
         Reminder:
@@ -59,81 +252,186 @@ Resources:
           Properties:
             Path: /ack
             Method: get
+
+ #List Reminders by User ID Role - allows logging to cloud watch logs and Scan in DynamoDB table defined above
+  ListRemindersByUserIDFunctionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: ListRemindersByUserIDFunctionPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+                #log to cloud formation
+              - Effect: Allow
+                Action:
+                  - 'logs:*'
+                Resource: 'arn:aws:logs:*:*:*'
+                #Insert into Dynamo DB
+              - Effect: Allow
+                Action:
+                  - 'dynamodb:Scan'
+                Resource: !Join 
+                  - ''
+                  - - 'arn:aws:dynamodb:'
+                    - !Ref 'AWS::Region'
+                    - ':'
+                    - !Ref 'AWS::AccountId'
+                    - ':table/'
+                    - !Ref 'AWS::StackName'
+                    - '-RemindersTable'
+
+  #Lambda to List reminders by User ID as acknowledged in dynamo db
+  ListRemindersByUserIDFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: reminder/
+      Handler: api_reminder_handler.list_reminders
+      Role: !GetAtt 
+        - ListRemindersByUserIDFunctionRole
+        - Arn
+      Runtime: python3.6
+      Events:
+        Reminder:
+          Type: Api
+          Properties:
+            Path: /list
+            Method: get
+  
+  #List Reminders by User ID Role - allows logging to cloud watch logs and Send SMS or Email
+  ExecuteReminderFunctionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: ExecuteReminderFunctionPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              #log to cloud formation
+              - Effect: Allow
+                Action:
+                  - 'logs:*'
+                Resource: 'arn:aws:logs:*:*:*'
+              #Publish to SNS
+              - Effect: Allow
+                Action:
+                  - 'sns:Publish'
+                Resource: '*'
+              #Send SMS
+              - Effect: Allow
+                Action:
+                  - 'ses:SendEmail'
+                Resource: '*'
+
+  #Lambda to Execute Notifications of reminders by SMS or Email in dynamo db - triggeted by Step function
   ExecuteReminderFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: reminder/
       Handler: execute_reminder_handler.execute_reminder
+      Role: !GetAtt 
+        - ExecuteReminderFunctionRole
+        - Arn
       Runtime: python3.6
-      Events:
-        HelloWorld:
-          Type: Api
-          Properties:
-            Path: /ack
-            Method: get
-  DynamoDBTable:
-    Type: AWS::DynamoDB::Table
-    Properties: 
-      AttributeDefinitions: 
-        - AttributeName: reminder_id
-          AttributeType: S
-      KeySchema: 
-        - AttributeName: reminder_id
-          KeyType: HASH
-      ProvisionedThroughput: 
-        ReadCapacityUnits: 1
-        WriteCapacityUnits: 1
-      StreamSpecification:
-        StreamViewType: NEW_IMAGE
+  
+  #Reminder State Funtion Role - allows logging to cloud watch logs and invoking the ExecuteReminder function
+  ReminderStateMachineRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - !Sub states.${AWS::Region}.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: ReminderStateMachinePolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              #log to cloud formation
+              - Effect: Allow
+                Action:
+                  - 'logs:*'
+                Resource: 'arn:aws:logs:*:*:*'
+              #Invoke ExecuteReminderFunction
+              - Effect: Allow
+                Action:
+                  - 'lambda:InvokeFunction'
+                Resource: !GetAtt [ ExecuteReminderFunction, Arn ]
+                
   ReminderStateMachine:
     Type: AWS::StepFunctions::StateMachine
     Properties:
       StateMachineName: Reminder-StateMachine
-      DefinitionString: |-
-        {
-          "StartAt": "wait_to_execute",
-          "States": {
-          "wait_to_execute": {
-            "Type": "Wait",
-            "TimestampPath": "$.notifyDate",
-            "Next": "executeNotifyLambda"
-            },
-            "executeNotifyLambda": {
-              "Type": "Task",
-              "Resource": "arn:aws:states:us-east-1:123456789012:activity:HelloWorld",
-              "Parameters":{  
-                  "FunctionName":"get-model-review-decision"
-              },
-              "Next": "checkSuccess"
-            },
-            "checkSuccess": {
-              "Type": "Choice",
-              "Choices" : [
-                {
-                "Variable": "$.reschedule",
-                "StringEquals": "true",
-                "Next": "wait_to_execute"
+      DefinitionString: 
+        !Sub
+          - |-
+            {
+              "StartAt": "wait_to_execute",
+              "States": {
+              "wait_to_execute": {
+                "Type": "Wait",
+                "TimestampPath": "$.notify_date_time",
+                "Next": "executeNotifyLambda"
+                },
+                "executeNotifyLambda": {
+                  "Type": "Task",
+                  "Resource": ${executeReminderArn},
+                  "Parameters":{  
+                      "FunctionName":"get-model-review-decision"
+                  },
+                  "Next": "checkSuccess"
+                },
+                "checkSuccess": {
+                  "Type": "Choice",
+                  "Choices" : [
+                    {
+                    "Variable": "$.to_execute",
+                    "StringEquals": "true",
+                    "Next": "wait_to_execute"
+                    }
+                  ],
+                "Default": "SuccessState"
+                },
+                "SuccessState": {
+                  "Type": "Succeed"
                 }
-              ],
-            "Default": "SuccessState"
-            },
-            "SuccessState": {
-              "Type": "Succeed"
+              }
             }
-          }
-        }
-      RoleArn: arn:aws:iam::111122223333:role/service-role/StatesExecutionRole-us-east-1
+          - {executeReminderArn: !GetAtt [ ExecuteReminderFunction, Arn ]}
+      Role: !GetAtt 
+        - ExecuteReminderFunctionRole
+        - Arn
 
 Outputs:
   # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
   # Find out more about other implicit resources you can reference within SAM
   # https://github.com/awslabs/serverless-application-model/blob/master/docs/internals/generated_resources.rst#api
-  HelloWorldApi:
-    Description: "API Gateway endpoint URL for Prod stage for Hello World function"
+  ReminderApi:
+    Description: "API Gateway endpoint URL Reminder App for a particular stage"
     Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/hello/"
-  HelloWorldFunction:
-    Description: "Hello World Lambda Function ARN"
-    Value: !GetAtt HelloWorldFunction.Arn
-  HelloWorldFunctionIamRole:
-    Description: "Implicit IAM Role created for Hello World function"
-    Value: !GetAtt HelloWorldFunctionRole.Arn

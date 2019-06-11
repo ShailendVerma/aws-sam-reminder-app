@@ -13,7 +13,10 @@ from botocore.exceptions import ClientError
 dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
 ssm = boto3.client('ssm', region_name="us-east-1")
 param_path= '{app_name}/{stage}/'.format(app_name=os.environ['APP_NAME'],stage=os.environ['STAGE'])
+#SNS Client for SMS
 sns = boto3.client('sns')
+#SES Client for Emails
+ses = boto3.client('ses')
 CHARSET = "UTF-8"
 
 table = dynamodb.Table('RemindersTable')
@@ -26,10 +29,11 @@ table = dynamodb.Table('RemindersTable')
 # if retryCount >= {MAX_RETRIES} mark the reminder as unacknowledged in dynamoDB
 # NOT USING CLOUD WATCH EVENTS AS 
 def execute_reminder(event, context):
-    #fetch the reminder
+    
     data = json.loads(event['body'])
     validate_field(data,'reminder_id')
-
+    timestamp = int(time.time() * 1000)
+    #fetch the reminder
     try:
         response = table.get_item(
         Key={
@@ -54,49 +58,46 @@ def execute_reminder(event, context):
         max_retry_count = ssm.get_parameters(Names=[param_path+"max_retry_count"])
         if item['retry_count'] > max_retry_count:
             logging('Reminder:{reminderId} has exceeded max retry counts'.format(reminderId=data['reminder_id']))
-            item['state'] = 'Unacknowledged'
-            return {
-                'to_execute':'false'
-            }
-
-        #else if notify_date_time is in the future return with to_execute as true + reminder_id + notify_date_time
-        if item['notify_date_time'] > max_retry_count:
-            logging('Reminder:{reminderId} has exceeded max retry counts'.format(reminderId=data['reminder_id']))
-            item['state'] = 'Unacknowledged'
+            #mark state as Unacknowledged
             result = table.update_item(
             Key={
                 'reminder_id': event['pathParameters']['reminder_id']
             },
             AttributeUpdates={
-                'notify_date_time': data['notify_date_time'],
-                'remind_msg': data['remind_msg'],
-                'updated_at': timestamp
+                'updated_at': timestamp,
+                'state': 'Unacknowledged'
             },
             )
+            # return to_execute as false
+            return {
+                'to_execute':'false'
+            }
 
+        #else if notify_date_time is in the future return with to_execute as true + reminder_id + notify_date_time
+        if item['notify_date_time'] > timestamp:
+            logging('Reminder:{reminderId} is scheduled for the future - skipping`  '.format(reminderId=data['reminder_id']))
             return {
                 'to_execute':'true',
                 'reminder_id':item['reminder_id'],
                 'notify_date_time':item['notify_date_time']
             }
 
-
         #else send notification based on notify_by and return (dont update state)
-        
+        if item['notify_by']['type'] == 'SMS' :
+            send_sms(item)
+        else:
+            send_email(item)
 
     return {
         "statusCode": 200,
         "body": json.dumps({
-            "message": "hello world",
-            # "location": ip.text.replace("\n", "")
+            "message": "Notification Sent successfully!",
         }),
     }
 
-def send_sms(event, context):
-    # TODO implement
+def send_sms(item):
     #Send SMS
-    
-    response = sns.publish(PhoneNumber = '+14165618562', Message='Welcome from Lambda' )
+    response = sns.publish(PhoneNumber = item['phone_number'], Message=item['remind_msg'])
 
     return {
         'statusCode': 200,
@@ -104,29 +105,29 @@ def send_sms(event, context):
     }
 
 
-def send_email(event, context):
+def send_email(item):
     #Send Email
-    ses = boto3.client('ses')
+    
     #Provide the contents of the email.
     response = ses.send_email(
         Destination={
             'ToAddresses': [
-                'shailend2k@gmail.com',
+                item['notify_by']['to_address'],
             ],
         },
         Message={
             'Body': {
                 'Text': {
                     'Charset': CHARSET,
-                    'Data': 'Hi from Lambda Function',
+                    'Data': item['remind_msg'],
                 },
             },
             'Subject': {
                 'Charset': CHARSET,
-                'Data': 'Hi from Lambda',
+                'Data': item['remind_msg'],
             },
         },
-        Source='shailend2k@gmail.com'
+        Source=item['notify_by']['from_address']
     )
     
     return {
