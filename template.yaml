@@ -7,6 +7,21 @@ Description: >
 Globals:
   Function:
     Timeout: 3
+    Environment:
+      Variables:
+        STAGE: !Ref Stage
+
+Parameters: 
+  ReminderS3Bucket: 
+    Type: String
+    Default: shail-reminder-app
+    Description: Name of S3 bucket where reminder app functions are stored.
+  Stage:
+    Type: String
+    AllowedValues:
+      - dev
+      - prod
+    Description: Stage of the deployment
 
 Resources:
 #DynamoDB Table
@@ -75,7 +90,7 @@ Resources:
   CreateReminderFunction:
     Type: AWS::Serverless::Function # More info about Function Resource: https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md#awsserverlessfunction
     Properties:
-      CodeUri: reminder/
+      CodeUri: reminder_app/
       Handler: api_reminder_handler.create_reminder
       Role: !GetAtt 
         - CreateReminderFunctionRole
@@ -130,7 +145,7 @@ Resources:
   UpdateReminderFunction:
     Type: AWS::Serverless::Function 
     Properties:
-      CodeUri: reminder/
+      CodeUri: reminder_app/
       Handler: api_reminder_handler.update_reminder
       Role: !GetAtt 
         - UpdateReminderFunctionRole
@@ -185,7 +200,7 @@ Resources:
   DeleteReminderFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: reminder/
+      CodeUri: reminder_app/
       Handler: api_reminder_handler.delete_reminder
       Role: !GetAtt 
         - DeleteReminderFunctionRole
@@ -240,7 +255,7 @@ Resources:
   AcknowledgeReminderFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: reminder/
+      CodeUri: reminder_app/
       Handler: api_reminder_handler.ack_reminder
       Role: !GetAtt 
         - AcknowledgeReminderFunctionRole
@@ -295,7 +310,7 @@ Resources:
   ListRemindersByUserIDFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: reminder/
+      CodeUri: reminder_app/
       Handler: api_reminder_handler.list_reminders
       Role: !GetAtt 
         - ListRemindersByUserIDFunctionRole
@@ -347,7 +362,7 @@ Resources:
   ExecuteReminderFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: reminder/
+      CodeUri: reminder_app/
       Handler: execute_reminder_handler.execute_reminder
       Role: !GetAtt 
         - ExecuteReminderFunctionRole
@@ -401,7 +416,7 @@ Resources:
                 },
                 "executeNotifyLambda": {
                   "Type": "Task",
-                  "Resource": ${executeReminderArn},
+                  "Resource": "${executeReminderArn}",
                   "Parameters":{  
                       "FunctionName":"get-model-review-decision"
                   },
@@ -424,9 +439,7 @@ Resources:
               }
             }
           - {executeReminderArn: !GetAtt [ ExecuteReminderFunction, Arn ]}
-      Role: !GetAtt 
-        - ExecuteReminderFunctionRole
-        - Arn
+      RoleArn: !GetAtt [ExecuteReminderFunctionRole, Arn]
 
 Outputs:
   # ServerlessRestApi is an implicit API created out of Events key under Serverless::Function
