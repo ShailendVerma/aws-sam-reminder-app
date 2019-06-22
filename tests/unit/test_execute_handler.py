@@ -52,12 +52,12 @@ def tests_execute_reminder_send_email(dynamodb_stub):
         }}
     }
 
-    expectedParams = {'Key': {'reminder_id': '3'}, 'TableName': 'RemindersTable'}
+    expectedParams = {'Key': {'reminder_id': '1'}, 'TableName': 'RemindersTable'}
     
     dynamodb_stub.add_response('get_item', {U'Item':reminder2send}, expectedParams)
 
     reminder_id2send = """{
-        "reminder_id":"3"
+        "reminder_id":"1"
     }"""
 
     expectedResponse = {'Destination': {
@@ -71,7 +71,7 @@ def tests_execute_reminder_send_email(dynamodb_stub):
     with stubber_ssm:
         with stubber_ses:
             response = execute_reminder({u'body': reminder_id2send}, 'context')  
-            assert response == {'body': ANY, 'statusCode': 200}
+            assert response == {'to_execute': 'true','notify_date_time': ANY, 'reminder_id': '1'}
 
 def tests_execute_reminder_send_sms(dynamodb_stub):
     stubber_ssm = Stubber(ssm)
@@ -105,18 +105,18 @@ def tests_execute_reminder_send_sms(dynamodb_stub):
         }}
     }
 
-    expectedParams = {'Key': {'reminder_id': '3'}, 'TableName': 'RemindersTable'}
+    expectedParams = {'Key': {'reminder_id': '1'}, 'TableName': 'RemindersTable'}
     
     dynamodb_stub.add_response('get_item', {U'Item':reminder2send}, expectedParams)
 
     reminder_id2send = """{
-        "reminder_id":"3"
+        "reminder_id":"1"
     }"""
 
     with stubber_ssm:
         with stubber_sns:
             response = execute_reminder({u'body': reminder_id2send}, 'context')  
-            assert response == {'body': ANY, 'statusCode': 200}
+            assert response == {'to_execute': 'true','notify_date_time': ANY, 'reminder_id': '1'}
 
 def tests_execute_reminder_not_pending(dynamodb_stub):
     time_In_Past_By_10_mins = (datetime.now() - timedelta(minutes = 10)).strftime('%Y-%m-%dT%H:%M:%S.%f')

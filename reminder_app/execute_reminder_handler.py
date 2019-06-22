@@ -4,7 +4,7 @@ import logging
 import os
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
 from boto3.dynamodb.conditions import Key, Attr
 from reminder_app.api_reminder_handler import validate_field
 import reminder_app.DecimalEncoder as DecimalEncoder
@@ -87,14 +87,23 @@ def execute_reminder(event, context):
 
         #else send notification based on notify_by and return (dont update state)
         if item['notify_by']['type'] == 'SMS' :
-            return send_sms(item)
+            send_sms(item)
         else:
-            return send_email(item)
+            send_email(item)
+        
+        #set a check notification status point 5 mins in the future for acknowledgment
+        time_In_Future_By_10_mins = (datetime.now() + timedelta(minutes = 5)).strftime('%Y-%m-%dT%H:%M:%S.%f')
+
+        return {
+                'to_execute':'true',
+                'reminder_id':item['reminder_id'],
+                'notify_date_time':time_In_Future_By_10_mins
+            }
 
 def send_sms(item):
     #Send SMS
     response = sns.publish(PhoneNumber = item['notify_by']['phone_number'], Message=item['remind_msg'])
-
+    logging.info(response)
     return {
         'statusCode': 200,
         'body': json.dumps(response)
@@ -125,7 +134,7 @@ def send_email(item):
         },
         Source=item['notify_by']['from_address']
     )
-    print(response)
+    logging.info(response)
     return {
         'statusCode': 200,
         'body': json.dumps(response)
