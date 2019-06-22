@@ -212,3 +212,6 @@ sam logs -n HelloWorldFunction --stack-name sam-app --tail
 * sam validate
 * sam package --template-file template.yaml --output-template-file package.yaml --s3-bucket shail-reminder-app
 * sam deploy --template-file /Users/anushreegarg/shail/AWS/sam/reminder-app/sam-app/package.yaml --stack-name remApp1 --capabilities CAPABILITY_IAM --parameter-overrides Stage=dev
+
+#Running Tests
+python3 -m pytest tests/

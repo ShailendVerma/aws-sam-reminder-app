@@ -4,7 +4,7 @@ import logging
 import os
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime,timedelta
 from boto3.dynamodb.conditions import Key, Attr
 
 dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
@@ -19,14 +19,26 @@ def validate_field(data,fieldName):
         raise Exception("Couldn't create the reminder item - {fieldName} missing".format(fieldName = fieldName))
 
 def validate_notify_date_time(data):
-    date_ts = datetime.strptime(data['notify_date_time'], '%Y-%m-%dT%H::%M::%S.%f')
-    current_ts = datetime.now
-    diff = (date_ts - current_ts).min
+    current_ts = datetime.now()
+    logging.info("Current ts:",current_ts)
+    print("Current ts:",current_ts)
+    date_ts = datetime.strptime(data['notify_date_time'], '%Y-%m-%dT%H:%M:%S.%f')
+    logging.info("Reminder ts:",date_ts)
+    print("Reminder ts:",date_ts)
+    diff = (date_ts - current_ts)
+    print("diff ts:",diff.seconds)
 
-    min_delay_param = ssm.get_parameters(Names=[param_path+"min_delay_param"])
-    max_delay_param = ssm.get_parameters(Names=[param_path+"max_delay_param"])
+    delay_params_list = ssm.get_parameters(Names=[param_path+"min_delay_param",param_path+"max_delay_param"])['Parameters']
 
-    if max_delay_param > diff  or diff < max_delay_param:
+    logging.debug(delay_params_list)
+
+    delay_params_dict = {param['Name'] : param for param in delay_params_list}
+    
+    min_delay_param = int(delay_params_dict[param_path+"min_delay_param"]['Value'])
+    max_delay_param = int(delay_params_dict[param_path+"max_delay_param"]['Value'])
+
+    delay_seconds = int(diff.seconds)
+    if (min_delay_param >  delay_seconds)  or (delay_seconds > max_delay_param):
         logging.error("Validation Failed")
         raise Exception("Reminder should be at least {min_delay_param} mins in the future and less than {max_delay_param} mins in the future".format(min_delay_param=min_delay_param,max_delay_param=max_delay_param))
 
@@ -83,11 +95,12 @@ def update_reminder(event, context):
         Key={
             'reminder_id': event['pathParameters']['reminder_id']
         },
-        AttributeUpdates={
-            'notify_date_time': data['notify_date_time'],
-            'remind_msg': data['remind_msg'],
-            'updated_at': timestamp
-        },
+        UpdateExpression="SET notify_date_time= :notify_date_time, updated_at= :updated_at, remind_msg= :remind_msg",
+        ExpressionAttributeValues={
+                    ':notify_date_time':data['notify_date_time'],
+                    ':remind_msg' : data['remind_msg'],
+                    ':updated_at':timestamp
+        }
     )
 
     return {
@@ -103,7 +116,9 @@ def delete_reminder(event, context):
         }
     )
     return {
-        "statusCode": 200
+        "statusCode": 200,
+        "body": result 
+
     }
 
 # Mark reminder as acknowledged in DynamoDB
@@ -114,14 +129,16 @@ def ack_reminder(event, context):
         Key={
             'reminder_id': event['pathParameters']['reminder_id']
         },
-        AttributeUpdates={
-            'state': 'Acknowledged',
-            'updated_at': timestamp
-        },
+        UpdateExpression="SET state= :state, updated_at= :updated_at",
+        ExpressionAttributeValues={
+                    ':state':'Acknowledged',
+                    ':updated_at':timestamp
+        }
     )
 
     return {
-        "statusCode": 200
+        "statusCode": 200,
+        "body": result 
     }
 
 # Mark reminder as acknowledged in DynamoDB

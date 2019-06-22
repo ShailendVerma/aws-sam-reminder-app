@@ -29,7 +29,6 @@ table = dynamodb.Table('RemindersTable')
 # if retryCount >= {MAX_RETRIES} mark the reminder as unacknowledged in dynamoDB
 # NOT USING CLOUD WATCH EVENTS AS 
 def execute_reminder(event, context):
-    
     data = json.loads(event['body'])
     validate_field(data,'reminder_id')
     timestamp = int(time.time() * 1000)
@@ -41,41 +40,45 @@ def execute_reminder(event, context):
         }
     )
     except ClientError as e:
-        logging(e.response['Error']['Message'])
+        logging.info(e.response['Error']['Message'])
     else:
         item = response['Item']
-        logging("GetItem succeeded:")
-        logging(json.dumps(item, indent=4, cls=DecimalEncoder))
+        logging.info("GetItem succeeded:")
+        logging.info(item)
 
         #if state of reminder is not pending return to_execute as false
         if item['state'] != 'Pending':
-            logging('Reminder:{reminderId} is not pending'.format(reminderId=data['reminder_id']))
+            logging.info('Reminder:{reminderId} is not pending'.format(reminderId=data['reminder_id']))
             return {
                 'to_execute':'false'
             }
 
         #else if retry_count > max_retry_count then mark state as Unacknowledged and return to_execute as false
-        max_retry_count = ssm.get_parameters(Names=[param_path+"max_retry_count"])
+        max_retry_count = int(ssm.get_parameters(Names=[param_path+"max_retry_count"])['Parameters'][0]['Value'])
+        print(max_retry_count)
         if item['retry_count'] > max_retry_count:
-            logging('Reminder:{reminderId} has exceeded max retry counts'.format(reminderId=data['reminder_id']))
+            logging.info('Reminder:{reminderId} has exceeded max retry counts'.format(reminderId=data['reminder_id']))
             #mark state as Unacknowledged
             result = table.update_item(
             Key={
-                'reminder_id': event['pathParameters']['reminder_id']
+                'reminder_id': data['reminder_id']
             },
-            AttributeUpdates={
-                'updated_at': timestamp,
-                'state': 'Unacknowledged'
-            },
+            UpdateExpression="SET state= :state, updated_at= :updated_at",
+            ExpressionAttributeValues={
+                    ':state' : 'Unacknowledged',
+                    ':updated_at':timestamp
+                }
             )
+
             # return to_execute as false
             return {
                 'to_execute':'false'
             }
 
         #else if notify_date_time is in the future return with to_execute as true + reminder_id + notify_date_time
-        if item['notify_date_time'] > timestamp:
-            logging('Reminder:{reminderId} is scheduled for the future - skipping`  '.format(reminderId=data['reminder_id']))
+        date_ts = datetime.strptime(item['notify_date_time'], '%Y-%m-%dT%H:%M:%S.%f')
+        if  date_ts > datetime.now():
+            logging.info('Reminder:{reminderId} is scheduled for the future - skipping`  '.format(reminderId=data['reminder_id']))
             return {
                 'to_execute':'true',
                 'reminder_id':item['reminder_id'],
@@ -84,20 +87,13 @@ def execute_reminder(event, context):
 
         #else send notification based on notify_by and return (dont update state)
         if item['notify_by']['type'] == 'SMS' :
-            send_sms(item)
+            return send_sms(item)
         else:
-            send_email(item)
-
-    return {
-        "statusCode": 200,
-        "body": json.dumps({
-            "message": "Notification Sent successfully!",
-        }),
-    }
+            return send_email(item)
 
 def send_sms(item):
     #Send SMS
-    response = sns.publish(PhoneNumber = item['phone_number'], Message=item['remind_msg'])
+    response = sns.publish(PhoneNumber = item['notify_by']['phone_number'], Message=item['remind_msg'])
 
     return {
         'statusCode': 200,
@@ -129,7 +125,7 @@ def send_email(item):
         },
         Source=item['notify_by']['from_address']
     )
-    
+    print(response)
     return {
         'statusCode': 200,
         'body': json.dumps(response)
