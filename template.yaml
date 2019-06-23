@@ -10,21 +10,55 @@ Globals:
     Environment:
       Variables:
         STAGE: !Ref Stage
+        APP_NAME: !Ref AppName
+        STACK_NAME: !Ref 'AWS::StackName'
 
 Parameters: 
   ReminderS3Bucket: 
     Type: String
     Default: shail-reminder-app
     Description: Name of S3 bucket where reminder app functions are stored.
+  #Stage of deployment
   Stage:
     Type: String
     AllowedValues:
       - dev
       - prod
     Description: Stage of the deployment
+  AppName:
+    Type: String
+    Description: Name of the App
 
 Resources:
-#DynamoDB Table
+  #SSM Parameters
+  #Minimum delay of reminders from current time default 5 mins
+  MinDelayParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Join [ "", [ "/",!Ref AppName,"/", !Ref Stage, "/min_delay_param" ] ]
+      Description: 'Minimum delay of reminder form current time in seconds defaut 5 mins'
+      Type: String
+      Value: 300
+
+  #Maximum delay of reminders from current times default 1 year 
+  MaxDelayParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Join [ "", [ "/",!Ref AppName,"/", !Ref Stage, "/max_delay_param" ] ]
+      Description: 'Maximum delay of reminders from current time in seconds default 1 year'
+      Type: String
+      Value: 31557600
+
+  #Maximum number of times a reminder must be retries before marking unacknowledged default 1 
+  MaxRetryCountParameter:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Name: !Join [ "", [ "/",!Ref AppName,"/", !Ref Stage, "/max_retry_count" ] ]
+      Description: 'Maximum number of times a reminder must be retries before marking unacknowledged default 1'
+      Type: String
+      Value: 1
+
+  #DynamoDB Table
   RemindersTable:
     Type: AWS::DynamoDB::Table
     Properties: 
@@ -85,6 +119,15 @@ Resources:
                     - ':table/'
                     - !Ref 'AWS::StackName'
                     - '-RemindersTable'
+              #Access SSM get parameters for min delay and max delay
+              - Effect: Allow
+                Action:
+                  - 'ssm:GetParametersByPath'
+                Resource: 
+                  - !Join ['',['arn:aws:ssm:',!Ref 'AWS::Region',':',!Ref 'AWS::AccountId',':parameter/',!Ref AppName,'/',!Ref Stage,'*']]
+                  # Not using exact GetParameters at it requires top level access to the resource 
+                  # also not using exact arn as GetParametersByPath requires access to the parent path of the param
+                  #- !Join ['',['arn:aws:ssm:',!Ref 'AWS::Region',':',!Ref 'AWS::AccountId',':parameter/',!Ref AppName,'/',!Ref Stage,'/','max_delay_param']]
 
   #Lambda to insert reminders into dynamo db
   CreateReminderFunction:
@@ -140,6 +183,13 @@ Resources:
                     - ':table/'
                     - !Ref 'AWS::StackName'
                     - '-RemindersTable'
+              #Access SSM get parameters for min delay and max delay
+              - Effect: Allow
+                Action:
+                  - 'ssm:GetParametersByPath'
+                Resource: 
+                  - !Join ['',['arn:aws:ssm:',!Ref 'AWS::Region',':',!Ref 'AWS::AccountId',':parameter/',!Ref AppName,'/',!Ref Stage,'*']]
+                  #- !Join ['',['arn:aws:ssm:',!Ref 'AWS::Region',':',!Ref 'AWS::AccountId',':parameter/',!Ref AppName,'/',!Ref Stage,'/','max_delay_param']]
 
   #Lambda to update reminders existing in dynamo db
   UpdateReminderFunction:
@@ -357,6 +407,35 @@ Resources:
                 Action:
                   - 'ses:SendEmail'
                 Resource: '*'
+              #Access SSM get parameters for max retry count
+              - Effect: Allow
+                Action:
+                  - 'ssm:GetParametersByPath'
+                Resource: !Join 
+                  - ''
+                  - - 'arn:aws:ssm:'
+                    - !Ref 'AWS::Region'
+                    - ':'
+                    - !Ref 'AWS::AccountId'
+                    - ':parameter/'
+                    - !Ref AppName
+                    - '/'
+                    - !Ref Stage
+                    - '*'
+              #Insert into/Read from Dynamo DB
+              - Effect: Allow
+                Action:
+                  - 'dynamodb:GetItem'
+                  - 'dynamodb:UpdateItem'
+                Resource: !Join 
+                  - ''
+                  - - 'arn:aws:dynamodb:'
+                    - !Ref 'AWS::Region'
+                    - ':'
+                    - !Ref 'AWS::AccountId'
+                    - ':table/'
+                    - !Ref 'AWS::StackName'
+                    - '-RemindersTable'
 
   #Lambda to Execute Notifications of reminders by SMS or Email in dynamo db - triggeted by Step function
   ExecuteReminderFunction:

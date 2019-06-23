@@ -9,9 +9,9 @@ from boto3.dynamodb.conditions import Key, Attr
 
 dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
 ssm = boto3.client('ssm', region_name="us-east-1")
-param_path= '{app_name}/{stage}/'.format(app_name=os.environ['APP_NAME'],stage=os.environ['STAGE'])
+param_path= '/{app_name}/{stage}'.format(app_name=os.environ['APP_NAME'],stage=os.environ['STAGE'])
 
-table = dynamodb.Table('RemindersTable')
+table = dynamodb.Table('{stack_name}-RemindersTable'.format(stack_name=os.environ['STACK_NAME']))
 
 def validate_field(data,fieldName):
     if fieldName not in data:
@@ -25,17 +25,21 @@ def validate_notify_date_time(data):
     date_ts = datetime.strptime(data['notify_date_time'], '%Y-%m-%dT%H:%M:%S.%f')
     logging.info("Reminder ts:",date_ts)
     print("Reminder ts:",date_ts)
+    if current_ts > date_ts:
+        logging.error("Validation Failed: Reminder in the past")
+        raise Exception("Reminder {date_ts} in the past".format(date_ts=date_ts))
+
     diff = (date_ts - current_ts)
     print("diff ts:",diff.seconds)
 
-    delay_params_list = ssm.get_parameters(Names=[param_path+"min_delay_param",param_path+"max_delay_param"])['Parameters']
+    delay_params_list = ssm.get_parameters_by_path(Path=param_path,Recursive=False)['Parameters']
 
     logging.debug(delay_params_list)
 
     delay_params_dict = {param['Name'] : param for param in delay_params_list}
     
-    min_delay_param = int(delay_params_dict[param_path+"min_delay_param"]['Value'])
-    max_delay_param = int(delay_params_dict[param_path+"max_delay_param"]['Value'])
+    min_delay_param = int(delay_params_dict[param_path+"/min_delay_param"]['Value'])
+    max_delay_param = int(delay_params_dict[param_path+"/max_delay_param"]['Value'])
 
     delay_seconds = int(diff.seconds)
     if (min_delay_param >  delay_seconds)  or (delay_seconds > max_delay_param):
@@ -50,7 +54,7 @@ def validate_notify_date_time(data):
 # validate not less than {MIN_DELAY_PARAM} mins left
 # validate not more than {MAX_DELAY_PARAM}
 def create_reminder(event, context):
-    data = json.loads(event['body'])
+    data = json.loads(event['body'],strict=False)
 
     validate_field(data,'user_id')
     validate_field(data,'notify_date_time')
@@ -83,7 +87,7 @@ def create_reminder(event, context):
 # Update a reminder in DynamoDB - ideally date change
 # Validate not less than {MIN_DELAY_PARAM} mins left 
 def update_reminder(event, context):
-    data = json.loads(event['body'])
+    data = json.loads(event['body'],strict=False)
 
     validate_field(data,'notify_date_time')
     validate_field(data,'remind_msg')
@@ -143,7 +147,7 @@ def ack_reminder(event, context):
 
 # Mark reminder as acknowledged in DynamoDB
 def list_reminders(event, context):
-    data = json.loads(event['body'])
+    data = json.loads(event['body'],strict=False)
 
     validate_field(data,'user_id')
 

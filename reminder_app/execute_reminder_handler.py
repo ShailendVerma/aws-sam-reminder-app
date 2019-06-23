@@ -12,14 +12,14 @@ from botocore.exceptions import ClientError
 
 dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
 ssm = boto3.client('ssm', region_name="us-east-1")
-param_path= '{app_name}/{stage}/'.format(app_name=os.environ['APP_NAME'],stage=os.environ['STAGE'])
+param_path= '/{app_name}/{stage}'.format(app_name=os.environ['APP_NAME'],stage=os.environ['STAGE'])
 #SNS Client for SMS
 sns = boto3.client('sns')
 #SES Client for Emails
 ses = boto3.client('ses')
 CHARSET = "UTF-8"
 
-table = dynamodb.Table('RemindersTable')
+table = dynamodb.Table('{stack_name}-RemindersTable'.format(stack_name=os.environ['STACK_NAME']))
 
 # Gets triggered by step function
 # Check if reminder is still in pending state and the execution date is in the past
@@ -29,7 +29,8 @@ table = dynamodb.Table('RemindersTable')
 # if retryCount >= {MAX_RETRIES} mark the reminder as unacknowledged in dynamoDB
 # NOT USING CLOUD WATCH EVENTS AS 
 def execute_reminder(event, context):
-    data = json.loads(event['body'])
+    #data = json.loads(event['body'],strict=False)
+    data = event['body']
     validate_field(data,'reminder_id')
     timestamp = int(time.time() * 1000)
     #fetch the reminder
@@ -54,7 +55,11 @@ def execute_reminder(event, context):
             }
 
         #else if retry_count > max_retry_count then mark state as Unacknowledged and return to_execute as false
-        max_retry_count = int(ssm.get_parameters(Names=[param_path+"max_retry_count"])['Parameters'][0]['Value'])
+        app_params_list = ssm.get_parameters_by_path(Path=param_path,Recursive=False)['Parameters']
+        logging.debug(app_params_list)
+        delay_params_dict = {param['Name'] : param for param in app_params_list}
+    
+        max_retry_count = int(delay_params_dict[param_path+"/max_retry_count"]['Value'])
         print(max_retry_count)
         if item['retry_count'] > max_retry_count:
             logging.info('Reminder:{reminderId} has exceeded max retry counts'.format(reminderId=data['reminder_id']))

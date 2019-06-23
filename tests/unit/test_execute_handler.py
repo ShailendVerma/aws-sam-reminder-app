@@ -15,10 +15,10 @@ def dynamodb_stub():
 
 def tests_execute_reminder_send_email(dynamodb_stub):
     stubber_ssm = Stubber(ssm)
-    stubber_ssm.add_response('get_parameters',
+    stubber_ssm.add_response('get_parameters_by_path',
         {"Parameters": 
-        [{ "Name":"test-app/test/max_retry_count","Value": "3"}]},
-        {'Names': ['test-app/test/max_retry_count']})
+        [{ "Name":"/test-app/test/max_retry_count","Value": "3"}]},
+        {'Path': '/test-app/test', 'Recursive': False})
     stubber_ssm.activate()
 
     stubber_ses = Stubber(ses)
@@ -52,13 +52,13 @@ def tests_execute_reminder_send_email(dynamodb_stub):
         }}
     }
 
-    expectedParams = {'Key': {'reminder_id': '1'}, 'TableName': 'RemindersTable'}
+    expectedParams = {'Key': {'reminder_id': '1'}, 'TableName': 'test-stack-RemindersTable'}
     
     dynamodb_stub.add_response('get_item', {U'Item':reminder2send}, expectedParams)
 
-    reminder_id2send = """{
+    reminder_id2send ={
         "reminder_id":"1"
-    }"""
+    }
 
     expectedResponse = {'Destination': {
                             'ToAddresses': ['shail@example.com']},
@@ -75,10 +75,10 @@ def tests_execute_reminder_send_email(dynamodb_stub):
 
 def tests_execute_reminder_send_sms(dynamodb_stub):
     stubber_ssm = Stubber(ssm)
-    stubber_ssm.add_response('get_parameters',
+    stubber_ssm.add_response('get_parameters_by_path',
         {"Parameters": 
-        [{ "Name":"test-app/test/max_retry_count","Value": "3"}]},
-        {'Names': ['test-app/test/max_retry_count']})
+        [{ "Name":"/test-app/test/max_retry_count","Value": "3"}]},
+        {'Path': '/test-app/test', 'Recursive': False})
     stubber_ssm.activate()
 
     stubber_sns = Stubber(sns)
@@ -105,13 +105,13 @@ def tests_execute_reminder_send_sms(dynamodb_stub):
         }}
     }
 
-    expectedParams = {'Key': {'reminder_id': '1'}, 'TableName': 'RemindersTable'}
+    expectedParams = {'Key': {'reminder_id': '1'}, 'TableName': 'test-stack-RemindersTable'}
     
     dynamodb_stub.add_response('get_item', {U'Item':reminder2send}, expectedParams)
 
-    reminder_id2send = """{
+    reminder_id2send = {
         "reminder_id":"1"
-    }"""
+    }
 
     with stubber_ssm:
         with stubber_sns:
@@ -136,13 +136,13 @@ def tests_execute_reminder_not_pending(dynamodb_stub):
         }}
     }
 
-    expectedParams = {'Key': {'reminder_id': '3'}, 'TableName': 'RemindersTable'}
+    expectedParams = {'Key': {'reminder_id': '3'}, 'TableName': 'test-stack-RemindersTable'}
     
     dynamodb_stub.add_response('get_item', {U'Item':reminder2send}, expectedParams)
 
-    reminder_id2send = """{
+    reminder_id2send = {
         "reminder_id":"3"
-    }"""
+    }
 
 
     response = execute_reminder({u'body': reminder_id2send}, 'context')  
@@ -150,10 +150,10 @@ def tests_execute_reminder_not_pending(dynamodb_stub):
 
 def tests_execute_reminder_exceeded_max_retry_counts(dynamodb_stub):
     stubber_ssm = Stubber(ssm)
-    stubber_ssm.add_response('get_parameters',
+    stubber_ssm.add_response('get_parameters_by_path',
         {"Parameters": 
-        [{ "Name":"test-app/test/max_retry_count","Value": "3"}]},
-        {'Names': ['test-app/test/max_retry_count']})
+        [{ "Name":"/test-app/test/max_retry_count","Value": "3"}]},
+        {'Path': '/test-app/test', 'Recursive': False})
     stubber_ssm.activate()
 
     time_In_Past_By_10_mins = (datetime.now() - timedelta(minutes = 10)).strftime('%Y-%m-%dT%H:%M:%S.%f')
@@ -173,17 +173,17 @@ def tests_execute_reminder_exceeded_max_retry_counts(dynamodb_stub):
         }}
     }
 
-    expectedParams = {'Key': {'reminder_id': '3'}, 'TableName': 'RemindersTable'}
+    expectedParams = {'Key': {'reminder_id': '3'}, 'TableName': 'test-stack-RemindersTable'}
     
     dynamodb_stub.add_response('get_item', {U'Item':reminder2send}, expectedParams)
 
-    reminder_id2send = """{
+    reminder_id2send = {
         "reminder_id":"3"
-    }"""
+    }
 
     expectedUpdateParams = { 
         u'Key': {u'reminder_id': u'3'},
-        u'TableName': u'RemindersTable',
+        u'TableName': u'test-stack-RemindersTable',
         u'UpdateExpression': u'SET state= :state, updated_at= :updated_at',
         u'ExpressionAttributeValues': {
             u':state': 'Unacknowledged', 
@@ -202,10 +202,10 @@ def tests_execute_reminder_exceeded_max_retry_counts(dynamodb_stub):
 
 def tests_execute_reminder_rescheduled(dynamodb_stub):
     stubber_ssm = Stubber(ssm)
-    stubber_ssm.add_response('get_parameters',
+    stubber_ssm.add_response('get_parameters_by_path',
         {"Parameters": 
-        [{ "Name":"test-app/test/max_retry_count","Value": "3"}]},
-        {'Names': ['test-app/test/max_retry_count']})
+        [{ "Name":"/test-app/test/max_retry_count","Value": "3"}]},
+        {'Path': '/test-app/test', 'Recursive': False})
     stubber_ssm.activate()
 
     time_In_Future_By_10_mins = (datetime.now() + timedelta(minutes = 10)).strftime('%Y-%m-%dT%H:%M:%S.%f')
@@ -225,13 +225,13 @@ def tests_execute_reminder_rescheduled(dynamodb_stub):
         }}
     }
 
-    expectedParams = {'Key': {'reminder_id': '3'}, 'TableName': 'RemindersTable'}
+    expectedParams = {'Key': {'reminder_id': '3'}, 'TableName': 'test-stack-RemindersTable'}
     
     dynamodb_stub.add_response('get_item', {U'Item':reminder2send}, expectedParams)
 
-    reminder_id2send = """{
+    reminder_id2send = {
         "reminder_id":"3"
-    }"""
+    }
 
     with stubber_ssm:
         response = execute_reminder({u'body': reminder_id2send}, 'context')  

@@ -15,10 +15,10 @@ def dynamodb_stub():
 
 def tests_create_reminder(dynamodb_stub):
     stubber1 = Stubber(ssm)
-    stubber1.add_response('get_parameters',
+    stubber1.add_response('get_parameters_by_path',
         {"Parameters": 
-        [{ "Name":"test-app/test/min_delay_param","Value": "300"},{ "Name":"test-app/test/max_delay_param","Value": "5000"}]},
-        {'Names': ['test-app/test/min_delay_param',"test-app/test/max_delay_param"]})
+        [{ "Name":"/test-app/test/min_delay_param","Value": "300"},{ "Name":"/test-app/test/max_delay_param","Value": "5000"}]},
+        {'Path': '/test-app/test', 'Recursive': False})
     stubber1.activate()
 
     time_In_Future_By_10_mins = (datetime.now() + timedelta(minutes = 10)).strftime('%Y-%m-%dT%H:%M:%S.%f')
@@ -46,7 +46,7 @@ def tests_create_reminder(dynamodb_stub):
                      'to_exeute': 'true',
                      'updated_at': ANY,
                      'user_id': '1'},
-            'TableName': 'RemindersTable'}
+            'TableName': 'test-stack-RemindersTable'}
     
     dynamodb_stub.add_response('put_item', {U'Attributes':{u'string':{"S": "string"}}}, expectedParams)
 
@@ -56,10 +56,10 @@ def tests_create_reminder(dynamodb_stub):
 
 def tests_update_reminder(dynamodb_stub):
     stubber2 = Stubber(ssm)
-    stubber2.add_response('get_parameters',
+    stubber2.add_response('get_parameters_by_path',
         {"Parameters": 
-        [{ "Name":"test-app/test/min_delay_param","Value": "300"},{ "Name":"test-app/test/max_delay_param","Value": "5000"}]},
-        {'Names': ['test-app/test/min_delay_param',"test-app/test/max_delay_param"]})
+        [{ "Name":"/test-app/test/min_delay_param","Value": "300"},{ "Name":"/test-app/test/max_delay_param","Value": "5000"}]},
+        {'Path': '/test-app/test', 'Recursive': False})
     stubber2.activate()
 
     time_In_Future_By_10_mins = (datetime.now() + timedelta(minutes = 10)).strftime('%Y-%m-%dT%H:%M:%S.%f')
@@ -76,7 +76,7 @@ def tests_update_reminder(dynamodb_stub):
 
     expectedParams = { 
         u'Key': {u'reminder_id': u'2'},
-        u'TableName': u'RemindersTable',
+        u'TableName': u'test-stack-RemindersTable',
         u'UpdateExpression': u'SET notify_date_time= :notify_date_time, updated_at= :updated_at, remind_msg= :remind_msg',
         u'ExpressionAttributeValues': {
             u':notify_date_time': ANY, 
@@ -99,7 +99,7 @@ def tests_update_reminder(dynamodb_stub):
 
 # pathParameters is a dictionary
 def tests_delete_reminder(dynamodb_stub):
-    dynamodb_stub.add_response('delete_item', {}, {'Key': {'reminder_id': '3'}, 'TableName': 'RemindersTable'})
+    dynamodb_stub.add_response('delete_item', {}, {'Key': {'reminder_id': '3'}, 'TableName': 'test-stack-RemindersTable'})
     reminder2delete = {
         "reminder_id":"3",
     }
@@ -114,7 +114,7 @@ def tests_ack_reminder(dynamodb_stub):
     expectedParams = {
             'ExpressionAttributeValues': {':state': 'Acknowledged', ':updated_at': ANY},
            'Key': {'reminder_id': '3'},
-           'TableName': 'RemindersTable',
+           'TableName': 'test-stack-RemindersTable',
            'UpdateExpression': 'SET state= :state, updated_at= :updated_at'
            }
     
@@ -130,7 +130,7 @@ def tests_list_reminders(dynamodb_stub):
     
     expectedParams = {
         'FilterExpression' : ANY,
-        'TableName': 'RemindersTable'
+        'TableName': 'test-stack-RemindersTable'
     }
 
     dynamodb_stub.add_response('scan', {'Items' : []}, expectedParams)
