@@ -6,9 +6,25 @@ import time
 import uuid
 from datetime import datetime,timedelta
 from boto3.dynamodb.conditions import Key, Attr
+#from reminder_app.date_utils import isostr_to_datetime, datetime_to_isostr
 
+#TODO PUT COMMON CODE IN LAYERS
+def isostr_to_datetime(date_string):
+    print("From Datestr:",date_string)
+    dtval = datetime.strptime(date_string, '%Y-%m-%dT%H:%M:%S.%f%z').replace(tzinfo=None)
+    print ("To Datetime:",dtval)
+    return dtval
+
+def datetime_to_isostr(date):
+    print("From Datetime:",date)
+    #FIXME - handle propertly
+    dt = date.strftime('%Y-%m-%dT%H:%M:%S.%f%Z')+'Z'
+    print("To Datestr:",dt)
+    return dt
+    
 dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
 ssm = boto3.client('ssm', region_name="us-east-1")
+sfn = boto3.client('stepfunctions')
 param_path= '/{app_name}/{stage}'.format(app_name=os.environ['APP_NAME'],stage=os.environ['STAGE'])
 
 table = dynamodb.Table('{stack_name}-RemindersTable'.format(stack_name=os.environ['STACK_NAME']))
@@ -19,10 +35,10 @@ def validate_field(data,fieldName):
         raise Exception("Couldn't create the reminder item - {fieldName} missing".format(fieldName = fieldName))
 
 def validate_notify_date_time(data):
-    current_ts = datetime.now()
+    current_ts = datetime.utcnow()
     logging.info("Current ts:",current_ts)
     print("Current ts:",current_ts)
-    date_ts = datetime.strptime(data['notify_date_time'], '%Y-%m-%dT%H:%M:%S.%f')
+    date_ts = isostr_to_datetime(data['notify_date_time'])
     logging.info("Reminder ts:",date_ts)
     print("Reminder ts:",date_ts)
     if current_ts > date_ts:
@@ -64,9 +80,9 @@ def create_reminder(event, context):
     validate_notify_date_time(data)
 
     timestamp = int(time.time() * 1000)
-
+    reminder_id = str(uuid.uuid1())
     reminder = {
-                'reminder_id': str(uuid.uuid1()), #Partition key
+                'reminder_id': reminder_id, #Partition key
                 'user_id': data['user_id'], #Sort key
                 'notify_date_time': data['notify_date_time'],
                 'remind_msg': data['remind_msg'],
@@ -76,7 +92,21 @@ def create_reminder(event, context):
                 'updated_at': timestamp
             }
 
+
     result = table.put_item(Item=reminder)
+ 
+    reminder_step_input = {
+        "reminder_id": reminder_id,
+        "to_execute" : "true",
+        "notify_date_time" : data['notify_date_time']
+    }
+
+    #Invoke the step function to execute
+    response = sfn.start_execution(
+        stateMachineArn=os.environ['STEP_FUNCTION_ARN'],
+        name=reminder_id+"_reminder_fn",
+        input=json.dumps(reminder_step_input)
+    )
 
     return {
         "statusCode": 200,

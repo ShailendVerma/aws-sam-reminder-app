@@ -6,9 +6,60 @@ import time
 import uuid
 from datetime import datetime, timedelta
 from boto3.dynamodb.conditions import Key, Attr
-from reminder_app.api_reminder_handler import validate_field
-import reminder_app.DecimalEncoder as DecimalEncoder
+#from reminder_app.api_reminder_handler import validate_field
+#import reminder_app.DecimalEncoder as DecimalEncoder
 from botocore.exceptions import ClientError
+#from reminder_app.date_utils import isostr_to_datetime, datetime_to_isostr
+
+#TODO PUT COMMON CODE IN LAYERS
+def isostr_to_datetime(date_string):
+    print("From Datestr:",date_string)
+    dtval = datetime.strptime(date_string, '%Y-%m-%dT%H:%M:%S.%f%z').replace(tzinfo=None)
+    print ("To Datetime:",dtval)
+    return dtval
+
+def datetime_to_isostr(date):
+    print("From Datetime:",date)
+    #FIXME - handle propertly
+    dt = date.strftime('%Y-%m-%dT%H:%M:%S.%f%Z')+'Z'
+    print("To Datestr:",dt)
+    return dt
+
+def validate_field(data,fieldName):
+    if fieldName not in data:
+        logging.error("Validation Failed")
+        raise Exception("Couldn't create the reminder item - {fieldName} missing".format(fieldName = fieldName))
+
+def validate_notify_date_time(data):
+    current_ts = datetime.utcnow()
+    logging.info("Current ts:",current_ts)
+    print("Current ts:",current_ts)
+    date_ts = isostr_to_datetime(data['notify_date_time'])
+    logging.info("Reminder ts:",date_ts)
+    print("Reminder ts:",date_ts)
+    if current_ts > date_ts:
+        logging.error("Validation Failed: Reminder in the past")
+        raise Exception("Reminder {date_ts} in the past".format(date_ts=date_ts))
+
+    diff = (date_ts - current_ts)
+    print("diff ts:",diff.seconds)
+
+    delay_params_list = ssm.get_parameters_by_path(Path=param_path,Recursive=False)['Parameters']
+
+    logging.debug(delay_params_list)
+
+    delay_params_dict = {param['Name'] : param for param in delay_params_list}
+    
+    min_delay_param = int(delay_params_dict[param_path+"/min_delay_param"]['Value'])
+    max_delay_param = int(delay_params_dict[param_path+"/max_delay_param"]['Value'])
+
+    delay_seconds = int(diff.seconds)
+    if (min_delay_param >  delay_seconds)  or (delay_seconds > max_delay_param):
+        logging.error("Validation Failed")
+        raise Exception("Reminder should be at least {min_delay_param} mins in the future and less than {max_delay_param} mins in the future".format(min_delay_param=min_delay_param,max_delay_param=max_delay_param))
+
+
+
 
 dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
 ssm = boto3.client('ssm', region_name="us-east-1")
@@ -30,7 +81,7 @@ table = dynamodb.Table('{stack_name}-RemindersTable'.format(stack_name=os.enviro
 # NOT USING CLOUD WATCH EVENTS AS 
 def execute_reminder(event, context):
     #data = json.loads(event['body'],strict=False)
-    data = event['body']
+    data = event
     validate_field(data,'reminder_id')
     timestamp = int(time.time() * 1000)
     #fetch the reminder
@@ -81,8 +132,8 @@ def execute_reminder(event, context):
             }
 
         #else if notify_date_time is in the future return with to_execute as true + reminder_id + notify_date_time
-        date_ts = datetime.strptime(item['notify_date_time'], '%Y-%m-%dT%H:%M:%S.%f')
-        if  date_ts > datetime.now():
+        date_ts = isostr_to_datetime(item['notify_date_time'])
+        if  date_ts > datetime.utcnow():
             logging.info('Reminder:{reminderId} is scheduled for the future - skipping`  '.format(reminderId=data['reminder_id']))
             return {
                 'to_execute':'true',
@@ -97,12 +148,13 @@ def execute_reminder(event, context):
             send_email(item)
         
         #set a check notification status point 5 mins in the future for acknowledgment
-        time_In_Future_By_10_mins = (datetime.now() + timedelta(minutes = 5)).strftime('%Y-%m-%dT%H:%M:%S.%f')
+        #FIXME remove hard coding
+        time_In_Future_By_5_mins = datetime_to_isostr(datetime.utcnow() + timedelta(minutes = 5))
 
         return {
                 'to_execute':'true',
                 'reminder_id':item['reminder_id'],
-                'notify_date_time':time_In_Future_By_10_mins
+                'notify_date_time':time_In_Future_By_5_mins
             }
 
 def send_sms(item):

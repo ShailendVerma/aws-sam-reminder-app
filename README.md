@@ -215,3 +215,6 @@ sam logs -n HelloWorldFunction --stack-name sam-app --tail
 
 #Running Tests
 python3 -m pytest tests/
+
+#Export Swagger with postman extensions
+aws apigateway get-export --parameters extensions='postman' --rest-api-id remApp8 --stage-name dev --export-type swagger /path/to/filename.json

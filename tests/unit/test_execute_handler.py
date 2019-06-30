@@ -6,6 +6,7 @@ from pytest_mock import mocker
 from boto3.dynamodb.conditions import Key, Attr
 from datetime import datetime, timedelta 
 from reminder_app.execute_reminder_handler import execute_reminder, ses, sns, ssm, dynamodb
+from reminder_app.date_utils import isostr_to_datetime, datetime_to_isostr
 
 @pytest.fixture(autouse=True)
 def dynamodb_stub():
@@ -34,7 +35,7 @@ def tests_execute_reminder_send_email(dynamodb_stub):
     stubber_ses.add_response('send_email',{"MessageId": "SomeID"},expectedParams)
     stubber_ses.activate()
 
-    time_In_Past_By_10_mins = (datetime.now() - timedelta(minutes = 10)).strftime('%Y-%m-%dT%H:%M:%S.%f')
+    time_In_Past_By_10_mins = datetime_to_isostr(datetime.utcnow() - timedelta(minutes = 10))
 
     print("Scheduling for ",time_In_Past_By_10_mins)
 
@@ -88,7 +89,7 @@ def tests_execute_reminder_send_sms(dynamodb_stub):
     stubber_sns.add_response('publish',{"MessageId": "SomeID"},expectedParams)
     stubber_sns.activate()
 
-    time_In_Past_By_10_mins = (datetime.now() - timedelta(minutes = 10)).strftime('%Y-%m-%dT%H:%M:%S.%f')
+    time_In_Past_By_10_mins = datetime_to_isostr(datetime.utcnow() - timedelta(minutes = 10))
 
     print("Scheduling for ",time_In_Past_By_10_mins)
 
@@ -119,7 +120,7 @@ def tests_execute_reminder_send_sms(dynamodb_stub):
             assert response == {'to_execute': 'true','notify_date_time': ANY, 'reminder_id': '1'}
 
 def tests_execute_reminder_not_pending(dynamodb_stub):
-    time_In_Past_By_10_mins = (datetime.now() - timedelta(minutes = 10)).strftime('%Y-%m-%dT%H:%M:%S.%f')
+    time_In_Past_By_10_mins = datetime_to_isostr(datetime.now() - timedelta(minutes = 10))
 
     print("Scheduling for ",time_In_Past_By_10_mins)
 
@@ -156,7 +157,7 @@ def tests_execute_reminder_exceeded_max_retry_counts(dynamodb_stub):
         {'Path': '/test-app/test', 'Recursive': False})
     stubber_ssm.activate()
 
-    time_In_Past_By_10_mins = (datetime.now() - timedelta(minutes = 10)).strftime('%Y-%m-%dT%H:%M:%S.%f')
+    time_In_Past_By_10_mins = datetime_to_isostr(datetime.utcnow() - timedelta(minutes = 10))
 
     print("Scheduling for ",time_In_Past_By_10_mins)
 
@@ -208,7 +209,7 @@ def tests_execute_reminder_rescheduled(dynamodb_stub):
         {'Path': '/test-app/test', 'Recursive': False})
     stubber_ssm.activate()
 
-    time_In_Future_By_10_mins = (datetime.now() + timedelta(minutes = 10)).strftime('%Y-%m-%dT%H:%M:%S.%f')
+    time_In_Future_By_10_mins = datetime_to_isostr(datetime.utcnow() + timedelta(minutes = 10))
 
     print("Scheduling for ",time_In_Future_By_10_mins)
 

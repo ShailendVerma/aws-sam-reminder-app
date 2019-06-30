@@ -5,7 +5,8 @@ from botocore.stub import Stubber, ANY
 from pytest_mock import mocker
 from boto3.dynamodb.conditions import Key, Attr
 from datetime import datetime, timedelta 
-from reminder_app.api_reminder_handler import create_reminder, dynamodb, ssm, update_reminder, delete_reminder, ack_reminder, list_reminders
+from reminder_app.api_reminder_handler import create_reminder, dynamodb, sfn, ssm, update_reminder, delete_reminder, ack_reminder, list_reminders
+from reminder_app.date_utils import isostr_to_datetime, datetime_to_isostr
 
 @pytest.fixture(autouse=True)
 def dynamodb_stub():
@@ -21,7 +22,14 @@ def tests_create_reminder(dynamodb_stub):
         {'Path': '/test-app/test', 'Recursive': False})
     stubber1.activate()
 
-    time_In_Future_By_10_mins = (datetime.now() + timedelta(minutes = 10)).strftime('%Y-%m-%dT%H:%M:%S.%f')
+    stubber_sfn = Stubber(sfn)
+    stubber_sfn.add_response('start_execution',
+        {'executionArn': 'SOME_ARN','startDate': datetime.utcnow()},
+        {'stateMachineArn':'test-stepfunction-arn', 'name' : ANY, 'input': ANY})
+
+    stubber_sfn.activate()
+
+    time_In_Future_By_10_mins = datetime_to_isostr(datetime.utcnow() + timedelta(minutes = 10))
 
     print("Scheduling for ",time_In_Future_By_10_mins)
 
@@ -50,7 +58,7 @@ def tests_create_reminder(dynamodb_stub):
     
     dynamodb_stub.add_response('put_item', {U'Attributes':{u'string':{"S": "string"}}}, expectedParams)
 
-    with stubber1:
+    with stubber1, stubber_sfn:
         response = create_reminder({u'body': reminder2create.replace('{0}',time_In_Future_By_10_mins)}, 'context')  
     assert response == {'body': ANY, 'statusCode': 200}
 
@@ -62,7 +70,7 @@ def tests_update_reminder(dynamodb_stub):
         {'Path': '/test-app/test', 'Recursive': False})
     stubber2.activate()
 
-    time_In_Future_By_10_mins = (datetime.now() + timedelta(minutes = 10)).strftime('%Y-%m-%dT%H:%M:%S.%f')
+    time_In_Future_By_10_mins = datetime_to_isostr(datetime.utcnow() + timedelta(minutes = 10))
 
     print("Scheduling for ",time_In_Future_By_10_mins)
     
