@@ -6,6 +6,7 @@ import time
 import uuid
 from datetime import datetime,timedelta
 from boto3.dynamodb.conditions import Key, Attr
+from botocore.exceptions import ClientError
 #from reminder_app.date_utils import isostr_to_datetime, datetime_to_isostr
 
 #TODO PUT COMMON CODE IN LAYERS
@@ -118,6 +119,15 @@ def create_reminder(event, context):
 # Update a reminder in DynamoDB - ideally date change
 # Validate not less than {MIN_DELAY_PARAM} mins left 
 def update_reminder(event, context):
+    #check if reminder exists
+    reminder = getReminder(event['pathParameters']['reminder_id'])
+    if reminder == None:
+        return {
+            "statusCode": 404,
+            "body": "Reminder not found" 
+        }
+    else:
+        print(reminder)
     data = json.loads(event['body'],strict=False)
 
     validate_field(data,'notify_date_time')
@@ -128,7 +138,8 @@ def update_reminder(event, context):
 
     result = table.update_item(
         Key={
-            'reminder_id': event['pathParameters']['reminder_id']
+            'reminder_id': reminder['reminder_id'],
+            'user_id': reminder['user_id']
         },
         UpdateExpression="SET notify_date_time= :notify_date_time, updated_at= :updated_at, remind_msg= :remind_msg",
         ExpressionAttributeValues={
@@ -140,51 +151,91 @@ def update_reminder(event, context):
 
     return {
         "statusCode": 200,
-        "body": json.dumps(result['Attributes']),
+        "body": json.dumps(result),
     }
 
 # Mark reminder as deleted in DynamoDB
 def delete_reminder(event, context):
+    #check if reminder exists
+    reminder = getReminder(event['pathParameters']['reminder_id'])
+    if reminder == None:
+        return {
+            "statusCode": 404,
+            "body": "Reminder not found" 
+        }
+    else:
+        print(reminder)
     result = table.delete_item(
         Key={
-            'reminder_id': event['pathParameters']['reminder_id']
+            'reminder_id': reminder['reminder_id'],
+            'user_id': reminder['user_id']
         }
     )
     return {
         "statusCode": 200,
-        "body": result 
+        "body": json.dumps(result) 
 
     }
 
 # Mark reminder as acknowledged in DynamoDB
 def ack_reminder(event, context):
     timestamp = int(time.time() * 1000)
-
+    #check if reminder exists
+    reminder = getReminder(event['pathParameters']['reminder_id'])
+    if reminder == None:
+        return {
+            "statusCode": 404,
+            "body": "Reminder not found" 
+        }
+    else:
+        print(reminder)
     result = table.update_item(
         Key={
-            'reminder_id': event['pathParameters']['reminder_id']
+            'reminder_id': reminder['reminder_id'],
+            'user_id': reminder['user_id']
         },
-        UpdateExpression="SET state= :state, updated_at= :updated_at",
+        UpdateExpression="SET #st= :state, updated_at= :updated_at, to_execute= :to_execute",
         ExpressionAttributeValues={
                     ':state':'Acknowledged',
-                    ':updated_at':timestamp
+                    ':updated_at':timestamp,
+                    ':to_execute':'false'
+        },
+        ExpressionAttributeNames={
+            "#st": "state"
         }
     )
 
     return {
         "statusCode": 200,
-        "body": result 
+        "body": json.dumps(result) 
     }
 
 # Mark reminder as acknowledged in DynamoDB
 def list_reminders(event, context):
-    data = json.loads(event['body'],strict=False)
+    user_id = event['pathParameters']['user_id']
 
-    validate_field(data,'user_id')
-
-    response = table.query(KeyConditionExpression=Key('user_id').eq(data['user_id']))
+    response = table.query(
+        IndexName='UserIdIndex',
+        KeyConditionExpression=Key('user_id').eq(user_id))
 
     return {
         "statusCode": 200,
         "body": json.dumps(response['Items']),
     }
+
+def getReminder(reminder_id):
+    #fetch the reminder
+    try:
+        response = table.query(
+        KeyConditionExpression=Key('reminder_id').eq(reminder_id)
+    )
+    except ClientError as e:
+        print(e.response['Error']['Message'])
+        logging.info(e.response['Error']['Message'])
+        return None
+    else:
+        item = None if len(response['Items']) == 0 else response['Items'][0]
+        logging.info("GetItem succeeded:")
+        print("GetItem succeeded:")
+        logging.info(item)
+        return item

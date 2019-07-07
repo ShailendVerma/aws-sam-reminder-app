@@ -79,7 +79,13 @@ def tests_update_reminder(dynamodb_stub):
     time_In_Future_By_10_mins = datetime_to_isostr(datetime.utcnow() + timedelta(minutes = 10))
 
     print("Scheduling for ",time_In_Future_By_10_mins)
+
+    #Add query response
+    dynamodb_stub.add_response('query', {U'Items':[{'reminder_id': {"S":"2"}, 'user_id': {"S":"1"}}]}, 
+    {'KeyConditionExpression': Key('reminder_id').eq('2'),
+    'TableName': 'test-stack-RemindersTable'})
     
+    #Add update_item response
     reminder2update = """
     {
         "reminder_id":"2",
@@ -89,7 +95,7 @@ def tests_update_reminder(dynamodb_stub):
     """
 
     expectedParams = { 
-        u'Key': {u'reminder_id': u'2'},
+        u'Key': {'reminder_id': '2', 'user_id': '1'},
         u'TableName': u'test-stack-RemindersTable',
         u'UpdateExpression': u'SET notify_date_time= :notify_date_time, updated_at= :updated_at, remind_msg= :remind_msg',
         u'ExpressionAttributeValues': {
@@ -109,38 +115,50 @@ def tests_update_reminder(dynamodb_stub):
 
     with stubber2:
         response = update_reminder({u'pathParameters': reminderIdParam,u'body': reminder2update.replace('{0}',time_In_Future_By_10_mins)}, 'context')  
-    assert response == {'body': '{"string": "string"}', 'statusCode': 200}
+    assert response == {'body': '{"Attributes": {"string": "string"}}', 'statusCode': 200}
 
 # pathParameters is a dictionary
 def tests_delete_reminder(dynamodb_stub):
-    dynamodb_stub.add_response('delete_item', {}, {'Key': {'reminder_id': '3'}, 'TableName': 'test-stack-RemindersTable'})
+    #Add query response
+    dynamodb_stub.add_response('query', {U'Items':[{'reminder_id': {"S":"3"}, 'user_id': {"S":"1"}}]}, 
+    {'KeyConditionExpression': Key('reminder_id').eq('3'),
+    'TableName': 'test-stack-RemindersTable'})
+
+    #Add delete item response
+    dynamodb_stub.add_response('delete_item', {}, 
+    {'Key': {'reminder_id': '3', 'user_id': '1'}, 'TableName': 'test-stack-RemindersTable'})
     reminder2delete = {
         "reminder_id":"3",
     }
     response = delete_reminder({u'pathParameters': reminder2delete}, 'context')  
-    assert response == {'statusCode': 200, 'body': {}}
+    assert response == {'statusCode': 200, 'body': '{}'}
 
 def tests_ack_reminder(dynamodb_stub):
+    #Add query response
+    dynamodb_stub.add_response('query', {U'Items':[{'reminder_id': {"S":"3"}, 'user_id': {"S":"1"}}]}, 
+    {'KeyConditionExpression': Key('reminder_id').eq('3'),
+    'TableName': 'test-stack-RemindersTable'})
+
+    #Add update item response
     reminder2ack = {
         "reminder_id":"3"
     }
 
     expectedParams = {
-            'ExpressionAttributeValues': {':state': 'Acknowledged', ':updated_at': ANY},
-           'Key': {'reminder_id': '3'},
-           'TableName': 'test-stack-RemindersTable',
-           'UpdateExpression': 'SET state= :state, updated_at= :updated_at'
+            'ExpressionAttributeNames': {'#st': 'state'},
+            'ExpressionAttributeValues': {':state': 'Acknowledged', ':updated_at': ANY, ':to_execute': 'false'},
+            'Key': {'reminder_id': '3', 'user_id': '1'},
+            'TableName': 'test-stack-RemindersTable',
+            'UpdateExpression': 'SET #st= :state, updated_at= :updated_at, to_execute= :to_execute'
            }
     
     dynamodb_stub.add_response('update_item', {}, expectedParams)
 
     response = ack_reminder({u'pathParameters': reminder2ack}, 'context')  
-    assert response == {'body': {}, 'statusCode': 200}
+    assert response == {'body': '{}', 'statusCode': 200}
 
 def tests_list_reminders(dynamodb_stub):
-    user2list = """{
-        "user_id":"123"
-    }"""
+    user2list = {"pathParameters":{"user_id":"123"}}
 
     reminders2fetch = [
     {
@@ -153,10 +171,12 @@ def tests_list_reminders(dynamodb_stub):
     },
     ]
     
-    expectedParams = {'KeyConditionExpression': Key('user_id').eq('123'), 'TableName': 'test-stack-RemindersTable'}
+    expectedParams = {
+        'IndexName': 'UserIdIndex',
+        'KeyConditionExpression': Key('user_id').eq('123'), 'TableName': 'test-stack-RemindersTable'}
     
     dynamodb_stub.add_response('query', {U'Items':reminders2fetch}, expectedParams)
 
-    response = list_reminders({u'body': user2list}, 'context')  
+    response = list_reminders(user2list, 'context')  
 
     assert response == {'body': '[{"user_id": "123", "reminder_id": "1"}, {"user_id": "123", "reminder_id": "2"}]', 'statusCode': 200}

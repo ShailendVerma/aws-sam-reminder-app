@@ -191,6 +191,7 @@ Resources:
                 #Insert into Dynamo DB
               - Effect: Allow
                 Action:
+                  - 'dynamodb:Query'
                   - 'dynamodb:UpdateItem'
                 Resource: !Join 
                   - ''
@@ -223,7 +224,7 @@ Resources:
         Reminder:
           Type: Api 
           Properties:
-            Path: /update
+            Path: /update/{reminder_id}
             Method: post
 
   #Delete Reminder Role - allows logging to cloud watch logs and DeleteItem in DynamoDB table defined above
@@ -253,6 +254,7 @@ Resources:
                 #Insert into Dynamo DB
               - Effect: Allow
                 Action:
+                  - 'dynamodb:Query'
                   - 'dynamodb:DeleteItem'
                 Resource: !Join 
                   - ''
@@ -278,7 +280,7 @@ Resources:
         Reminder:
           Type: Api
           Properties:
-            Path: /delete
+            Path: /delete/{reminder_id}
             Method: get
 
   #Acknowledge Reminder Role - allows logging to cloud watch logs and putItem in DynamoDB table defined above
@@ -308,6 +310,7 @@ Resources:
                 #Insert into Dynamo DB
               - Effect: Allow
                 Action:
+                  - 'dynamodb:Query'
                   - 'dynamodb:UpdateItem'
                 Resource: !Join 
                   - ''
@@ -333,7 +336,7 @@ Resources:
         Reminder:
           Type: Api
           Properties:
-            Path: /ack
+            Path: /ack/{reminder_id}
             Method: get
 
  #List Reminders by User ID Role - allows logging to cloud watch logs and Scan in DynamoDB table defined above
@@ -373,6 +376,7 @@ Resources:
                     - ':table/'
                     - !Ref 'AWS::StackName'
                     - '-RemindersTable'
+                    - '/index/UserIdIndex'
 
   #Lambda to List reminders by User ID as acknowledged in dynamo db
   ListRemindersByUserIDFunction:
@@ -388,7 +392,7 @@ Resources:
         Reminder:
           Type: Api
           Properties:
-            Path: /list
+            Path: /list/{user_id}
             Method: get
   
   #List Reminders by User ID Role - allows logging to cloud watch logs and Send SMS or Email
