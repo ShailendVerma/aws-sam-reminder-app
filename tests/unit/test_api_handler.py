@@ -46,12 +46,18 @@ def tests_create_reminder(dynamodb_stub):
     }
     """
 
-    expectedParams = {'Item': {'notify_date_time': ANY,
+    expectedParams = {'Item': 
+                        {
+                            'notify_by': 
+                            {'from_address': 'shail@gmail.com',
+                            'to_address': 'shail@gmail.com',
+                            'type': 'Email'},
+                            'notify_date_time': ANY,
                     'remind_msg': 'Pay your taxes',
                      'reminder_id': ANY,
-                     'retryCount': 0,
+                     'retry_count': 0,
                      'state': 'Pending',
-                     'to_exeute': 'true',
+                     'to_execute': 'true',
                      'updated_at': ANY,
                      'user_id': '1'},
             'TableName': 'test-stack-RemindersTable'}
@@ -135,13 +141,22 @@ def tests_list_reminders(dynamodb_stub):
     user2list = """{
         "user_id":"123"
     }"""
-    
-    expectedParams = {
-        'FilterExpression' : ANY,
-        'TableName': 'test-stack-RemindersTable'
-    }
 
-    dynamodb_stub.add_response('scan', {'Items' : []}, expectedParams)
+    reminders2fetch = [
+    {
+        "user_id":{"S":"123"},
+        "reminder_id":{"S":"1"}
+    },
+    {
+        "user_id":{"S":"123"},
+        "reminder_id":{"S":"2"}
+    },
+    ]
+    
+    expectedParams = {'KeyConditionExpression': Key('user_id').eq('123'), 'TableName': 'test-stack-RemindersTable'}
+    
+    dynamodb_stub.add_response('query', {U'Items':reminders2fetch}, expectedParams)
 
     response = list_reminders({u'body': user2list}, 'context')  
-    assert response == {'body': '[]', 'statusCode': 200}
+
+    assert response == {'body': '[{"user_id": "123", "reminder_id": "1"}, {"user_id": "123", "reminder_id": "2"}]', 'statusCode': 200}

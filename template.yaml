@@ -77,6 +77,16 @@ Resources:
         WriteCapacityUnits: 1
       StreamSpecification:
         StreamViewType: NEW_IMAGE
+      GlobalSecondaryIndexes:
+      - IndexName: UserIdIndex
+        KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+        Projection:
+          ProjectionType: KEYS_ONLY
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
       TableName: !Join 
         - ''
         - - !Ref 'AWS::StackName'
@@ -353,7 +363,7 @@ Resources:
                 #Insert into Dynamo DB
               - Effect: Allow
                 Action:
-                  - 'dynamodb:Scan'
+                  - 'dynamodb:Query'
                 Resource: !Join 
                   - ''
                   - - 'arn:aws:dynamodb:'
@@ -433,7 +443,7 @@ Resources:
               #Insert into/Read from Dynamo DB
               - Effect: Allow
                 Action:
-                  - 'dynamodb:GetItem'
+                  - 'dynamodb:Query'
                   - 'dynamodb:UpdateItem'
                 Resource: !Join 
                   - ''

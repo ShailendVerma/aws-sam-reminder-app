@@ -75,32 +75,35 @@ table = dynamodb.Table('{stack_name}-RemindersTable'.format(stack_name=os.enviro
 # Gets triggered by step function
 # Check if reminder is still in pending state and the execution date is in the past
 # Check mode email or sms and send out email and call appropriate method
-# retryCount +=1
+# retry_count +=1
 # Create event to check if reminder is in acknowledged in 15 mins else mark as pending self again
-# if retryCount >= {MAX_RETRIES} mark the reminder as unacknowledged in dynamoDB
+# if retry_count >= {MAX_RETRIES} mark the reminder as unacknowledged in dynamoDB
 # NOT USING CLOUD WATCH EVENTS AS 
 def execute_reminder(event, context):
     #data = json.loads(event['body'],strict=False)
     data = event
+    logging.info("Event: "+str(event))
+    print("Event:>> "+str(event))
     validate_field(data,'reminder_id')
     timestamp = int(time.time() * 1000)
     #fetch the reminder
     try:
-        response = table.get_item(
-        Key={
-            'reminder_id': data['reminder_id']
-        }
+        response = table.query(
+        KeyConditionExpression=Key('reminder_id').eq(data['reminder_id'])
     )
     except ClientError as e:
+        print(e.response['Error']['Message'])
         logging.info(e.response['Error']['Message'])
     else:
-        item = response['Item']
+        item = response['Items'][0]
         logging.info("GetItem succeeded:")
+        print("GetItem succeeded:")
         logging.info(item)
 
         #if state of reminder is not pending return to_execute as false
         if item['state'] != 'Pending':
             logging.info('Reminder:{reminderId} is not pending'.format(reminderId=data['reminder_id']))
+            print('Reminder:{reminderId} is not pending'.format(reminderId=data['reminder_id']))
             return {
                 'to_execute':'false'
             }
@@ -114,6 +117,7 @@ def execute_reminder(event, context):
         print(max_retry_count)
         if item['retry_count'] > max_retry_count:
             logging.info('Reminder:{reminderId} has exceeded max retry counts'.format(reminderId=data['reminder_id']))
+            print('Reminder:{reminderId} has exceeded max retry counts'.format(reminderId=data['reminder_id']))
             #mark state as Unacknowledged
             result = table.update_item(
             Key={

@@ -53,9 +53,9 @@ def tests_execute_reminder_send_email(dynamodb_stub):
         }}
     }
 
-    expectedParams = {'Key': {'reminder_id': '1'}, 'TableName': 'test-stack-RemindersTable'}
-    
-    dynamodb_stub.add_response('get_item', {U'Item':reminder2send}, expectedParams)
+    expectedParams = {'KeyConditionExpression': Key('reminder_id').eq('1'), 'TableName': 'test-stack-RemindersTable'}
+     
+    dynamodb_stub.add_response('query', {U'Items':[reminder2send]}, expectedParams)
 
     reminder_id2send ={
         "reminder_id":"1"
@@ -71,7 +71,7 @@ def tests_execute_reminder_send_email(dynamodb_stub):
 
     with stubber_ssm:
         with stubber_ses:
-            response = execute_reminder({u'body': reminder_id2send}, 'context')  
+            response = execute_reminder(reminder_id2send, 'context')  
             assert response == {'to_execute': 'true','notify_date_time': ANY, 'reminder_id': '1'}
 
 def tests_execute_reminder_send_sms(dynamodb_stub):
@@ -106,9 +106,9 @@ def tests_execute_reminder_send_sms(dynamodb_stub):
         }}
     }
 
-    expectedParams = {'Key': {'reminder_id': '1'}, 'TableName': 'test-stack-RemindersTable'}
+    expectedParams = {'KeyConditionExpression': Key('reminder_id').eq('1'), 'TableName': 'test-stack-RemindersTable'}
     
-    dynamodb_stub.add_response('get_item', {U'Item':reminder2send}, expectedParams)
+    dynamodb_stub.add_response('query', {U'Items':[reminder2send]}, expectedParams)
 
     reminder_id2send = {
         "reminder_id":"1"
@@ -116,7 +116,7 @@ def tests_execute_reminder_send_sms(dynamodb_stub):
 
     with stubber_ssm:
         with stubber_sns:
-            response = execute_reminder({u'body': reminder_id2send}, 'context')  
+            response = execute_reminder(reminder_id2send, 'context')  
             assert response == {'to_execute': 'true','notify_date_time': ANY, 'reminder_id': '1'}
 
 def tests_execute_reminder_not_pending(dynamodb_stub):
@@ -137,16 +137,16 @@ def tests_execute_reminder_not_pending(dynamodb_stub):
         }}
     }
 
-    expectedParams = {'Key': {'reminder_id': '3'}, 'TableName': 'test-stack-RemindersTable'}
+    expectedParams = {'KeyConditionExpression': Key('reminder_id').eq('1'), 'TableName': 'test-stack-RemindersTable'}
     
-    dynamodb_stub.add_response('get_item', {U'Item':reminder2send}, expectedParams)
+    dynamodb_stub.add_response('query', {U'Items':[reminder2send]}, expectedParams)
 
     reminder_id2send = {
-        "reminder_id":"3"
+        "reminder_id":"1"
     }
 
 
-    response = execute_reminder({u'body': reminder_id2send}, 'context')  
+    response = execute_reminder(reminder_id2send, 'context')  
     assert response == {'to_execute': 'false'}
 
 def tests_execute_reminder_exceeded_max_retry_counts(dynamodb_stub):
@@ -174,9 +174,9 @@ def tests_execute_reminder_exceeded_max_retry_counts(dynamodb_stub):
         }}
     }
 
-    expectedParams = {'Key': {'reminder_id': '3'}, 'TableName': 'test-stack-RemindersTable'}
+    expectedParams = {'KeyConditionExpression': Key('reminder_id').eq('3'), 'TableName': 'test-stack-RemindersTable'}
     
-    dynamodb_stub.add_response('get_item', {U'Item':reminder2send}, expectedParams)
+    dynamodb_stub.add_response('query', {U'Items':[reminder2send]}, expectedParams)
 
     reminder_id2send = {
         "reminder_id":"3"
@@ -198,7 +198,7 @@ def tests_execute_reminder_exceeded_max_retry_counts(dynamodb_stub):
 
 
     with stubber_ssm:
-        response = execute_reminder({u'body': reminder_id2send}, 'context')  
+        response = execute_reminder(reminder_id2send, 'context')  
         assert response == {'to_execute': 'false'}
 
 def tests_execute_reminder_rescheduled(dynamodb_stub):
@@ -226,16 +226,16 @@ def tests_execute_reminder_rescheduled(dynamodb_stub):
         }}
     }
 
-    expectedParams = {'Key': {'reminder_id': '3'}, 'TableName': 'test-stack-RemindersTable'}
+    expectedParams = {'KeyConditionExpression': Key('reminder_id').eq('3'), 'TableName': 'test-stack-RemindersTable'}
     
-    dynamodb_stub.add_response('get_item', {U'Item':reminder2send}, expectedParams)
+    dynamodb_stub.add_response('query', {U'Items':[reminder2send]}, expectedParams)
 
     reminder_id2send = {
         "reminder_id":"3"
     }
 
     with stubber_ssm:
-        response = execute_reminder({u'body': reminder_id2send}, 'context')  
+        response = execute_reminder(reminder_id2send, 'context')  
         assert response == {'to_execute': 'true','notify_date_time': ANY, 'reminder_id': '3'}
 
 

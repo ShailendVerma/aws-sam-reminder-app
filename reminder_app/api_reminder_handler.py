@@ -21,7 +21,7 @@ def datetime_to_isostr(date):
     dt = date.strftime('%Y-%m-%dT%H:%M:%S.%f%Z')+'Z'
     print("To Datestr:",dt)
     return dt
-    
+
 dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
 ssm = boto3.client('ssm', region_name="us-east-1")
 sfn = boto3.client('stepfunctions')
@@ -87,9 +87,10 @@ def create_reminder(event, context):
                 'notify_date_time': data['notify_date_time'],
                 'remind_msg': data['remind_msg'],
                 'state' : 'Pending',
-                'to_exeute': 'true',
-                'retryCount': 0,
-                'updated_at': timestamp
+                'to_execute': 'true',
+                'retry_count': 0,
+                'updated_at': timestamp,
+                'notify_by': data['notify_by']
             }
 
 
@@ -181,11 +182,9 @@ def list_reminders(event, context):
 
     validate_field(data,'user_id')
 
-    result = table.scan(
-        FilterExpression=Attr('user_id').eq(data['user_id'])
-    )
+    response = table.query(KeyConditionExpression=Key('user_id').eq(data['user_id']))
 
     return {
         "statusCode": 200,
-        "body": json.dumps(result['Items']),
+        "body": json.dumps(response['Items']),
     }
